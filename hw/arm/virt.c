@@ -667,6 +667,13 @@ static void fdt_add_pmu_nodes(const VirtMachineState *vms)
     ARMCPU *armcpu = ARM_CPU(first_cpu);
     uint32_t irqflags = GIC_FDT_IRQ_FLAGS_LEVEL_HI;
     MachineState *ms = MACHINE(vms);
+    const char *compat = NULL;
+    const char *pmus_v7[] = {
+        "arm,cortex-a7-pmu",
+        "arm,cortex-a8-pmu",
+        "arm,cortex-a9-pmu",
+        "arm,cortex-a15-pmu",
+    };
 
     if (!arm_feature(&armcpu->env, ARM_FEATURE_PMU)) {
         assert(!object_property_get_bool(OBJECT(armcpu), "pmu", NULL));
@@ -679,11 +686,21 @@ static void fdt_add_pmu_nodes(const VirtMachineState *vms)
                              (1 << MACHINE(vms)->smp.cpus) - 1);
     }
 
-    qemu_fdt_add_subnode(ms->fdt, "/pmu");
-    if (arm_feature(&armcpu->env, ARM_FEATURE_V8)) {
-        const char compat[] = "arm,armv8-pmuv3";
+    if (arm_feature(&armcpu->env, ARM_FEATURE_V7)) {
+        for (unsigned i = 0; i < ARRAY_SIZE(pmus_v7); i++) {
+            if (strstr(pmus_v7[i], armcpu->dtb_compatible) == pmus_v7[i]) {
+                compat = pmus_v7[i];
+                break;
+            }
+        }
+    } else if (arm_feature(&armcpu->env, ARM_FEATURE_V8)) {
+        compat = "arm,armv8-pmuv3";
+    }
+
+    if (compat) {
+        qemu_fdt_add_subnode(ms->fdt, "/pmu");
         qemu_fdt_setprop(ms->fdt, "/pmu", "compatible",
-                         compat, sizeof(compat));
+                         compat, strlen(compat) + 1);
         qemu_fdt_setprop_cells(ms->fdt, "/pmu", "interrupts",
                                GIC_FDT_IRQ_TYPE_PPI,
                                INTID_TO_PPI(VIRTUAL_PMU_IRQ), irqflags);
